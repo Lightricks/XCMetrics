@@ -25,7 +25,7 @@ class XCMetricsLoop {
     private let group = DispatchGroup()
     private var mobiusController: MobiusController<MetricsUploaderModel, MetricsUploaderEvent, MetricsUploaderEffect>!
 
-    func startLoop(with command: Command, plugins: [XCMetricsPlugin] = []) {
+    func startLoop(with command: Command, plugins: [XCMetricsPlugin]) {
         setUpCompletedNotificationListener()
         group.enter()
         let start = Date()

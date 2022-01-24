@@ -129,6 +129,10 @@ public struct XCMetrics: ParsableCommand {
     @Option(name: [.customLong("uploadCurrentLogOnly")], help: "If only the log of the current build should be uploaded")
     public var uploadCurrentLogOnly: Bool = false
 
+    /// An optional metadata file to be attached to the build. The file has to contain a valid JSON object where the values are strings.
+    @Option(name: [.customLong("metadataFile")], help: "An optional JSON metadata file to be attached to the build")
+    public var metadataFile: String?
+
     private static let loop = XCMetricsLoop()
 
     /// The default initializer for the `XCMetrics` object.
@@ -139,6 +143,10 @@ public struct XCMetrics: ParsableCommand {
     public func run(with configuration: XCMetricsConfiguration) {
         do {
             let command = try fetchEnvironmentVariablesParameters()
+
+            if let metadataFile = metadataFile {
+                configuration.add(plugin: try createPluginFrom(metadataFile: metadataFile))
+            }
             XCMetrics.loop.startLoop(with: command, plugins: configuration.plugins)
         } catch {
             fatalError(error.localizedDescription)
@@ -149,7 +157,12 @@ public struct XCMetrics: ParsableCommand {
     /// - Throws: Throws an error in case of missing or invalid required arguments.
     public func run() throws {
         let command = try fetchEnvironmentVariablesParameters()
-        XCMetrics.loop.startLoop(with: command)
+        let configuration = XCMetricsConfiguration()
+        if let metadataFile = metadataFile {
+            configuration.add(plugin: try createPluginFrom(metadataFile: metadataFile))
+        }
+
+        XCMetrics.loop.startLoop(with: command, plugins: configuration.plugins)
     }
 
     func argumentError() -> ValidationError {
@@ -162,6 +175,22 @@ public struct XCMetrics: ParsableCommand {
         The --authorizationKey must be used in conjunction with --authorizationValue. One cannot be used without the other.
         Type 'XCMetrics --help' for more information.
         """)
+    }
+
+    private func createPluginFrom(metadataFile: String) throws -> XCMetricsPlugin {
+        let metadataObject: Any
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: metadataFile))
+            metadataObject = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            throw ValidationError("Flag --metadataFile was given a file that doesn't exist or doesn't contain a JSON object.")
+        }
+
+        guard let metadataDictionary = metadataObject as? [String: String] else {
+            throw ValidationError("Flag --metadataFile was given a file that doesn't contain String only values.")
+        }
+        let body: XCMetricsPlugin.PluginBody = { _ in return metadataDictionary }
+        return XCMetricsPlugin(name: "default", body: body)
     }
 
     /// Some parameters can be omitted and should be parsed from the current environment.
